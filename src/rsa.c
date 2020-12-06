@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #include <sys/random.h>
 
 keypair_t rsa_gen_keypair() {
@@ -87,12 +86,12 @@ void rsa_dec(bytestream_t msg, bytestream_t const cipher, rsa_key_t const key) {
 	bs_set_mpz(msg, mpz_cipher);
 	rsa_oaep_dec(msg, msg);
 
-	/* Remove extra zeros to the right ------------*/
-	mpz_set_bs(mpz_cipher, msg);
-	mp_bitcnt_t first = mpz_scan1(mpz_cipher, 0);
-	mpz_div_2exp(mpz_cipher, mpz_cipher, first);
-	bs_set_mpz(msg, mpz_cipher);
-	/* ------------------------------------------- */
+	/* -- Remove extra zeros to the right -----------*/
+	/* mpz_set_bs(mpz_cipher, msg);                  */
+	/* mp_bitcnt_t first = mpz_scan1(mpz_cipher, 0); */
+	/* mpz_div_2exp(mpz_cipher, mpz_cipher, first);  */
+	/* bs_set_mpz(msg, mpz_cipher);                  */
+	/* ----------------------------------------------*/
 
 	mpz_clear(mpz_cipher);
 }
@@ -240,21 +239,24 @@ void rsa_oaep_dec(bytestream_t msg, bytestream_t const encoded) {
 
 void rsa_save_key(char * const filepath, rsa_key_t const key) {
 	FILE *file = fopen(filepath, "wb");
-	assert(file);
+	if (!file) {
+		fprintf(stderr, "Could not open \"%s\" for writting\n", filepath);
+		exit(EXIT_FAILURE);
+	}
 
 	bytestream_t bs;
 	bs_init_size(bs, BITLEN / 8); /* TODO: wrong size */
 
 	/* Write modulo */
 	bs_set_mpz(bs, key.mod);
-	size_t size = bs_len(bs);
-	fwrite(&size, sizeof(size_t), 1, file);
+	word_t size = bs_len(bs);
+	fwrite(&size, sizeof(word_t), 1, file);
 	fwrite(bs[0]->_data, 1, bs_len(bs), file);
 
 	/* Write exponent */
 	bs_set_mpz(bs, key.exp);
 	size = bs_len(bs);
-	fwrite(&size, sizeof(size_t), 1, file);
+	fwrite(&size, sizeof(word_t), 1, file);
 	fwrite(bs[0]->_data, 1, bs_len(bs), file);
 
 	/* Clear */
@@ -264,18 +266,21 @@ void rsa_save_key(char * const filepath, rsa_key_t const key) {
 
 rsa_key_t rsa_load_key(char * const filepath) {
 	FILE *file = fopen(filepath, "rb");
-	assert(file);
+	if (!file) {
+		fprintf(stderr, "Could not open \"%s\" for reading\n", filepath);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Create and init key */
 	rsa_key_t key;
 	mpz_inits(key.exp, key.mod, NULL);
 	
-	size_t size;
+	word_t size;
 	void *data;
 	bytestream_t bs;
 
 	/* Read modulo length */
-	fread(&size, sizeof(size_t), 1, file);
+	fread(&size, sizeof(word_t), 1, file);
 	data = malloc(size);
 	bs_init_size(bs, size);
 
@@ -286,7 +291,7 @@ rsa_key_t rsa_load_key(char * const filepath) {
 	mpz_set_bs(key.mod, bs);
 
 	/* Read exponent length */
-	fread(&size, sizeof(size_t), 1, file);
+	fread(&size, sizeof(word_t), 1, file);
 	data = realloc(data, size);
 	
 	/* Read exponent */
@@ -306,12 +311,19 @@ rsa_key_t rsa_load_key(char * const filepath) {
 void rsa_sign_file(char * const signpath, char * const filepath, rsa_key_t const key) {
 	FILE *src, *dst;
 	src = fopen(filepath, "rb");
-	assert(src);
+	if (!src) {
+		fprintf(stderr, "Could not open \"%s\" for reading\n", filepath);
+		exit(EXIT_FAILURE);
+	}
+
 	char signpath_suffix[strlen(signpath) + strlen(SIGNSUFFIX) + 1];
 	strcpy(signpath_suffix, signpath);
 	strcat(signpath_suffix, SIGNSUFFIX);
 	dst = fopen(signpath_suffix, "wb");
-	assert(dst);
+	if (!dst) {
+		fprintf(stderr, "Could not open \"%s\" for writting\n", signpath);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Count bytes in source */
 	size_t size = 0;
@@ -346,9 +358,16 @@ void rsa_sign_file(char * const signpath, char * const filepath, rsa_key_t const
 int rsa_verify_file(char * const signpath, char * const filepath, rsa_key_t const key) {
 	FILE *file, *signature;
 	file = fopen(filepath, "rb");
-	assert(file);
+	if (!file) {
+		fprintf(stderr, "Could not open \"%s\" for reading\n", filepath);
+		exit(EXIT_FAILURE);
+	}
+
 	signature = fopen(signpath, "rb");
-	assert(signature);
+	if (!signature) {
+		fprintf(stderr, "Could not open \"%s\" for reading\n", signpath);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Count size in file */
 	size_t size = 0;
