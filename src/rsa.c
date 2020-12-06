@@ -4,10 +4,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/random.h>
 
 keypair_t rsa_gen_keypair() {
 	gmp_randstate_t randstate;
 	gmp_randinit_default(randstate);
+	unsigned long seed;
+	getrandom(&seed, sizeof(unsigned long), GRND_RANDOM);
+	gmp_randseed_ui(randstate, seed);
 
 	mpz_t p, q, n, phi, e, d;
 
