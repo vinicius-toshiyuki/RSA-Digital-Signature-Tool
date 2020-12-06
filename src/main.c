@@ -1,43 +1,122 @@
 #include <gmp.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <getopt.h>
 #include "../include/rsa.h"
 
-int main() {
-	/* Initialization */
-	mpz_t m;
-	mpz_init(m);
+/* Executable name */
+#define PROGRAMNAME "rsa"
 
-	bytestream_t msg, sign, cipher;
-	bs_init(msg);
-	bs_init(sign);
-	bs_init(cipher);
+/* Commands */
+#define GENKEYS "genkeys"
+#define SIGN "sign"
+#define VERIFY "verify"
 
-	/* Print message */
-	bs_set_b(msg, "abc", 3);
-	mpz_set_bs(m, msg);
-	gmp_printf("Original message: %Zx\n", m);
+/* Command line arguments */
+#define HELPA "h"
+#define CMDA "c"
+#define KEYA "k"
+#define FILEA "f"
+#define SIGNA "s"
 
-	/* Generate key pair */
-	keypair_t keys = rsa_gen_keypair();
+#define HELPO 'h'
+#define CMDO 'c'
+#define KEYO 'k'
+#define FILEO 'f'
+#define SIGNO 's'
 
-	/* Encrypt message */
-	rsa_enc(cipher, msg, keys.sk);
-	mpz_set_bs(m, cipher);
-	gmp_printf("Encrypted message: %Zx\n", m);
+#define print_usage() \
+fprintf(stderr, "Usage: "PROGRAMNAME" -"CMDA" COMMAND OPTIONS\n"); \
+fprintf(stderr, "\t -"CMDA" Available commands are: "GENKEYS"|"SIGN"|"VERIFY"\n"); \
+fprintf(stderr, "Commands:\n"); \
+fprintf(stderr, "\t "GENKEYS" Generate a key pair\n"); \
+fprintf(stderr, "\t Options:\n"); \
+fprintf(stderr, "\t\t -"FILEA" File name prefix to save public key ("PKSUFFIX") and secret key ("SKSUFFIX")\n"); \
+fprintf(stderr, "\t "SIGN" Sign a file\n"); \
+fprintf(stderr, "\t Options:\n"); \
+fprintf(stderr, "\t\t -"FILEA" File to sign\n"); \
+fprintf(stderr, "\t\t -"KEYA" Key file\n"); \
+fprintf(stderr, "\t\t -"SIGNA" File name prefix to save signature ("SIGNSUFFIX")\n"); \
+fprintf(stderr, "\t "VERIFY" Verify a file\n"); \
+fprintf(stderr, "\t Options:\n"); \
+fprintf(stderr, "\t\t -"FILEA" File to verify\n"); \
+fprintf(stderr, "\t\t -"KEYA" Key file\n"); \
+fprintf(stderr, "\t\t -"SIGNA" Signature file\n")
 
-	/* Sign message */
-	rsa_sign(sign, msg, keys.sk);
-	printf("Signature is %s\n", rsa_verify(sign, msg, keys.pk) ? "Valid" : "Invalid");
+int main (int argc, char **argv) {
+	char *cmd = NULL, *keyfile = NULL, *file = NULL, *sign = NULL;
 
-	/* Decrypt message */
-	rsa_dec(msg, cipher, keys.pk);
-	mpz_set_bs(m, msg);
-	gmp_printf("Decrypted message: %Zx\n", m);
+	/* Read command line arguments */
+	int c;
+	while ((c = getopt(argc, argv, HELPA CMDA":" KEYA ":" FILEA ":" SIGNA ":")) != -1)
+		switch (c) {
+			case CMDO:
+				cmd = optarg;
+				break;
+			case KEYO:
+				keyfile = optarg;
+				break;
+			case FILEO:
+				file = optarg;
+				break;
+			case SIGNO:
+				sign = optarg;
+				break;
+			default:
+				fprintf(stderr, "Bad arguments\n");
+			case HELPO:
+				/* Print usage */
+				print_usage();
+				exit(EXIT_FAILURE);
+		}
 
-	/* Clear environment */
-	bs_clear(msg);
-	bs_clear(sign);
-	bs_clear(cipher);
-	mpz_clear(m);
+	if (!cmd) {
+		print_usage();
+		exit(EXIT_FAILURE);
+	}
+
+	/* Check if GENKEYS command is well-formed */
+	if (!strcmp(GENKEYS, cmd) && !file) {
+		fprintf(stderr, "Missing argument: -"FILEA"\n");
+		exit(EXIT_FAILURE);
+	/* Check if SIGN or VERIFY command is well-formed */
+	} else if (
+		(!strcmp(SIGN, cmd) || !strcmp(VERIFY, cmd)) &&
+		(!file || !keyfile || !sign)
+	) {
+		fprintf(stderr, "Missing argument: -"FILEA" OR -"KEYA" OR -"SIGN"\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/* Run command */
+	if (!strcmp(GENKEYS, cmd)) {
+		keypair_t keys = rsa_gen_keypair();
+
+		char file_ext[strlen(file) + KEYSUFFIXLEN + 1];
+		strcpy(file_ext, file);
+		strcat(file_ext, PKSUFFIX);
+		rsa_save_key(file_ext, keys.pk);
+		strcpy(file_ext, file);
+		strcat(file_ext, SKSUFFIX);
+		rsa_save_key(file_ext, keys.sk);
+
+		rsa_clear_keys(keys);
+	} else if (!strcmp(SIGN, cmd)) {
+		rsa_key_t key = rsa_load_key(keyfile);
+		rsa_sign_file(sign, file, key);
+
+		rsa_clear_key(key);
+	} else if (!strcmp(VERIFY, cmd)) {
+		rsa_key_t key = rsa_load_key(keyfile);
+		printf("%s\n", rsa_verify_file(sign, file, key) ? "Valid" : "Invalid");
+
+		rsa_clear_key(key);
+	} else {
+		fprintf(stderr, "Invalid command: \"%s\"\n", cmd);
+		exit(EXIT_FAILURE);
+	}
+
 	return 0;
 }

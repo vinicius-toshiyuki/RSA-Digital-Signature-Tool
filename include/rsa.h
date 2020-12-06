@@ -13,6 +13,17 @@
 #define EXPONENT 65537
 #define OAEP_K0 88
 
+/**	IO Consants
+ * 	SIGNSUFFIX: signature file suffix
+ * 	PKSUFFIX: public key file suffix
+ * 	SKSUFFIX: secret key file suffix
+ * 	KEYSUFFIXLEN: maximum length of a key file suffix
+ */
+#define SIGNSUFFIX ".sign"
+#define PKSUFFIX ".pk"
+#define SKSUFFIX ".sk"
+#define KEYSUFFIXLEN 3
+
 /**
  * 	RSA key struct
  *
@@ -92,4 +103,40 @@ void rsa_oaep_enc(bytestream_t encoded, bytestream_t const msg);
  */
 void rsa_oaep_dec(bytestream_t msg, bytestream_t const encoded);
 
+/**
+ * 	Save a RSA key to a file
+ *
+ * 	@param filepath File path to save key
+ * 	@param key RSA key
+ */
+void rsa_save_key(char * const filepath, rsa_key_t const key);
+
+/**
+ * 	Load a RSA key from a file
+ *
+ * 	@param filepath File path
+ * 	@return key RSA key
+ */
+rsa_key_t rsa_load_key(char * const filepath);
+
+/**
+ * 	Sign a file and save it's signature to a file.
+ *
+ * 	@param signpath File path to save signature
+ * 	@param filepath File path to sign
+ * 	@param key RSA key
+ */
+void rsa_sign_file(char * const signpath, char * const filepath, rsa_key_t const key);
+
+/**
+ * 	Verify a file signature.
+ *
+ * 	@param signpath Signature file path
+ * 	@param filepath File path
+ * 	@param key RSA key
+ */
+int rsa_verify_file(char * const signpath, char * const filepath, rsa_key_t const key);
+
+#define rsa_clear_keys(keys) mpz_clears(keys.pk.exp, keys.pk.mod, keys.sk.exp, keys.sk.mod, NULL)
+#define rsa_clear_key(key) mpz_clears(key.exp, key.mod, NULL)
 #endif

@@ -12,14 +12,6 @@ static const word_t RC[] = {
 	0x8000000000008080, 0x0000000080000001, 0x8000000080008008
 };
 
-static const int ROTATIONS[5][5] = {
-	{ 0, 36,  3, 41, 18},
-	{ 1, 44, 10, 45,  2},
-	{62,  6, 43, 15, 61},
-	{28, 55, 25, 21, 56},
-	{27, 20, 39,  8, 14}
-};
-
 void state_init(state_t *st) {
 	st[0] = malloc(sizeof(word_t *) * 5);
 	for (int i = 0; i < 5; i++)

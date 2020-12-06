@@ -1,2 +1,9 @@
 *.o
-rsa
+rsa.out
+build/
+docs/
+teste
+*.sk
+*.pk
+*.sign
+tags

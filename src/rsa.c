@@ -1,6 +1,9 @@
 #include "../include/rsa.h"
 #include "../include/sha3.h"
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
 keypair_t rsa_gen_keypair() {
 	gmp_randstate_t randstate;
@@ -229,4 +232,157 @@ void rsa_oaep_dec(bytestream_t msg, bytestream_t const encoded) {
 	mpz_clears(X, Y, r, NULL);
 	bs_clear(hX);
 	bs_clear(hr);
+}
+
+void rsa_save_key(char * const filepath, rsa_key_t const key) {
+	FILE *file = fopen(filepath, "wb");
+	assert(file);
+
+	bytestream_t bs;
+	bs_init_size(bs, BITLEN / 8); /* TODO: wrong size */
+
+	/* Write modulo */
+	bs_set_mpz(bs, key.mod);
+	size_t size = bs_len(bs);
+	fwrite(&size, sizeof(size_t), 1, file);
+	fwrite(bs[0]->_data, 1, bs_len(bs), file);
+
+	/* Write exponent */
+	bs_set_mpz(bs, key.exp);
+	size = bs_len(bs);
+	fwrite(&size, sizeof(size_t), 1, file);
+	fwrite(bs[0]->_data, 1, bs_len(bs), file);
+
+	/* Clear */
+	bs_clear(bs);
+	fclose(file);
+}
+
+rsa_key_t rsa_load_key(char * const filepath) {
+	FILE *file = fopen(filepath, "rb");
+	assert(file);
+
+	/* Create and init key */
+	rsa_key_t key;
+	mpz_inits(key.exp, key.mod, NULL);
+	
+	size_t size;
+	void *data;
+	bytestream_t bs;
+
+	/* Read modulo length */
+	fread(&size, sizeof(size_t), 1, file);
+	data = malloc(size);
+	bs_init_size(bs, size);
+
+	/* Read modulo */
+	fread(data, 1, size, file);
+	bs_set_b(bs, data, size);
+
+	mpz_set_bs(key.mod, bs);
+
+	/* Read exponent length */
+	fread(&size, sizeof(size_t), 1, file);
+	data = realloc(data, size);
+	
+	/* Read exponent */
+	fread(data, 1, size, file);
+	bs_set_b(bs, data, size);
+
+	mpz_set_bs(key.exp, bs);
+
+	/* Clear */
+	bs_clear(bs);
+	fclose(file);
+	free(data);
+
+	return key;
+}
+
+void rsa_sign_file(char * const signpath, char * const filepath, rsa_key_t const key) {
+	FILE *src, *dst;
+	src = fopen(filepath, "rb");
+	assert(src);
+	char signpath_suffix[strlen(signpath) + strlen(SIGNSUFFIX) + 1];
+	strcpy(signpath_suffix, signpath);
+	strcat(signpath_suffix, SIGNSUFFIX);
+	dst = fopen(signpath_suffix, "wb");
+	assert(dst);
+
+	/* Count bytes in source */
+	size_t size = 0;
+	while (fgetc(src) != EOF) size++;
+	fseek(src, 0, SEEK_SET);
+
+	/* Read source */
+	bytestream_t bs;
+	bs_init_size(bs, size);
+
+	void *data = malloc(size);
+	fread(data, 1, size, src);
+	bs_set_b(bs, data, size);
+	free(data);
+
+	/* Sign message */
+	bytestream_t sign;
+	bs_init_size(sign, BITLEN / 8);
+	rsa_sign(sign, bs, key);
+
+	/* Save signature to file */
+	fwrite(sign[0]->_data, 1, bs_len(sign), dst);
+
+	/* Clear */
+	bs_clear(sign);
+	bs_clear(bs);
+
+	fclose(src);
+	fclose(dst);
+}
+
+int rsa_verify_file(char * const signpath, char * const filepath, rsa_key_t const key) {
+	FILE *file, *signature;
+	file = fopen(filepath, "rb");
+	assert(file);
+	signature = fopen(signpath, "rb");
+	assert(signature);
+
+	/* Count size in file */
+	size_t size = 0;
+	while (fgetc(file) != EOF) size++;
+	fseek(file, 0, SEEK_SET);
+
+	/* Read source */
+	bytestream_t bs_file;
+	bs_init_size(bs_file, size);
+
+	void *data = malloc(size);
+	fread(data, 1, size, file);
+	bs_set_b(bs_file, data, size);
+
+	/* Count size in signature */
+	size = 0;
+	while (fgetc(signature) != EOF) size++;
+	fseek(signature, 0, SEEK_SET);
+
+	/* Read signature */
+	bytestream_t bs_signature;
+	bs_init_size(bs_signature, size);
+
+	data = realloc(data, size);
+	fread(data, 1, size, signature);
+	bs_set_b(bs_signature, data, size);
+
+	/* Verify signature */
+	int ret = rsa_verify(bs_signature, bs_file, key);
+
+	/* Clear */
+	bs_clear(bs_file);
+	bs_clear(bs_signature);
+
+	fclose(file);
+	fclose(signature);
+
+	free(data);
+
+	return ret;
 }
